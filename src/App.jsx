@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /**
  * CONCOURS — Detailing site styled as a service ticket / work order.
@@ -14,12 +14,20 @@ const OPS = [
   { code: "ENG-06", name: "Engine Bay Detail", hrs: "1.0", price: 80 },
 ];
 
+const IMG = {
+  gloss: "https://images.unsplash.com/photo-1755288348835-dc6c29852299?q=80&w=1200&auto=format&fit=crop",
+  pair: "https://images.unsplash.com/photo-1767907571229-01cf4ba03590?q=80&w=1200&auto=format&fit=crop",
+  wheel: "https://images.unsplash.com/photo-1708805283017-c662be2c7a44?q=80&w=1000&auto=format&fit=crop",
+  bay: "https://images.unsplash.com/photo-1708805282676-0c15476eb8a2?q=80&w=1000&auto=format&fit=crop",
+  interior: "https://images.unsplash.com/photo-1708805282695-ef186db20192?q=80&w=1000&auto=format&fit=crop",
+};
+
 const PROCEDURE = [
-  ["01", "Inspect", "Paint depth and defects logged under inspection lighting."],
-  ["02", "Decontaminate", "Foam, hand wash, iron removal, and clay."],
-  ["03", "Correct", "Machine polishing removes swirls and oxidation."],
-  ["04", "Protect", "Sealant or ceramic coating is applied and cured."],
-  ["05", "Reveal", "Final wipe-down, inspection, keys returned."],
+  ["01", "Inspect", "Paint depth and defects logged under inspection lighting.", IMG.pair],
+  ["02", "Decontaminate", "Foam, hand wash, iron removal, and clay.", IMG.wheel],
+  ["03", "Correct", "Machine polishing removes swirls and oxidation.", IMG.bay],
+  ["04", "Protect", "Sealant or ceramic coating is applied and cured.", IMG.interior],
+  ["05", "Reveal", "Final wipe-down, inspection, keys returned.", IMG.gloss],
 ];
 
 const PACKAGES = [
@@ -41,7 +49,7 @@ const money = (n) => "$" + n.toFixed(2);
 const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
 function SecBar({ n, t }) {
-  return <div className="wo-secbar"><span className="wo-secn">{n}</span><span>{t}</span></div>;
+  return <div className="wo-secbar" data-reveal="stamp"><span className="wo-secn" data-parallax="14">{n}</span><span>{t}</span></div>;
 }
 
 function Typed({ text, speed = 130, delay = 400 }) {
@@ -88,6 +96,37 @@ export default function WorkOrderSite() {
     addEventListener("mousemove", move); loop();
     return () => { removeEventListener("mousemove", move); cancelAnimationFrame(raf); };
   }, []);
+
+  useEffect(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const secs = Array.from(document.querySelectorAll(".wo-sec"));
+    if (!secs.length) return;
+    let raf = null;
+    const update = () => {
+      const vh = innerHeight || 800;
+      for (const el of secs) {
+        const r = el.getBoundingClientRect();
+        // entrance: rise up as the section enters from the bottom, settle at mid-screen
+        let ep = (vh - r.top) / (vh * 0.5);
+        if (ep < 0) ep = 0; else if (ep > 1) ep = 1;
+        // recede: scale down, dim, lift, and blur once the section bottom passes mid-screen (mostly read)
+        let rp = (0.6 * vh - r.bottom) / (0.6 * vh);
+        if (rp < 0) rp = 0; else if (rp > 1) rp = 1;
+        const ty = (1 - ep) * 48 - rp * 56;
+        const sc = 1 - rp * 0.18;
+        el.style.transform = "translate3d(0," + ty.toFixed(1) + "px,0) scale(" + sc.toFixed(3) + ")";
+        el.style.opacity = (1 - rp * 0.62).toFixed(3);
+        el.style.filter = rp > 0.01 ? "blur(" + (rp * 3).toFixed(1) + "px)" : "none";
+      }
+      raf = null;
+    };
+    const onScroll = () => { if (raf == null) raf = requestAnimationFrame(update); };
+    update();
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("resize", onScroll);
+    return () => { removeEventListener("scroll", onScroll); removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, []);
+
   const pkgTotal = (codes) => OPS.filter((o) => codes.includes(o.code)).reduce((a, o) => a + o.price, 0);
 
   return (
@@ -101,6 +140,8 @@ export default function WorkOrderSite() {
         .wo { cursor:none; }
         .wo-dot { position:fixed; top:0; left:0; width:26px; height:26px; border:1.5px solid #fff; border-radius:50%; pointer-events:none; z-index:9999; mix-blend-mode:difference; will-change:transform; }
         @media (pointer:coarse) { .wo { cursor:auto; } .wo-dot { display:none; } }
+        /* scroll handoff — the section above recedes (scale + dim) as the next rises over it */
+        .wo-sec { will-change:transform, opacity; transform-origin:50% 32%; }
         .hw { font-family:'Caveat',cursive; color:var(--blue); font-weight:600; }
         .wrap { max-width:1080px; margin:0 auto; padding:0 28px; }
 
@@ -116,7 +157,36 @@ export default function WorkOrderSite() {
         .wo-burger { display:none; }
 
         /* HERO */
-        .wo-hero { position:relative; padding:48px 0 60px; border-bottom:2px dashed var(--line); overflow:hidden; }
+        .wo-hero { position:relative; min-height:92vh; display:flex; align-items:center; padding:0; overflow:hidden; border-bottom:2px dashed var(--line); background:#0D0D0F; }
+        .wo-hero-vid { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:62% 50%; z-index:0; }
+        .wo-hero-veil { position:absolute; inset:0; z-index:1; background:linear-gradient(90deg, rgba(13,13,15,.92) 16%, rgba(13,13,15,.58) 55%, rgba(13,13,15,.28) 100%); }
+        .wo-hero-inner { position:relative; z-index:2; padding-top:72px; padding-bottom:72px; }
+        .wo-hero-inner .wo-hero-strip { color:#E7E5DE; }
+        .wo-hero-inner .wo-hero-strip b { color:#fff; }
+        .wo-hero-inner .hw { color:#EDEBE4; }
+        .wo-hero-inner .wo-h1 { color:#F6F3EB; }
+        .wo-hero-inner .wo-caret { background:#F6F3EB; }
+        .wo-hero-inner .wo-lead { color:#C7C5BE; }
+        .wo-hero-inner .wo-note { color:#E7E5DE; }
+        .wo-hero-inner .wo-cta2 { color:#F6F3EB; border-color:#F6F3EB; }
+        /* monumental hero entrance */
+        .wo-hero-curtain { position:absolute; inset:0; z-index:4; background:#0A0A0C; pointer-events:none; animation:woCurtain 1.2s ease .05s forwards; }
+        @keyframes woCurtain { to { opacity:0; } }
+        .wo-hero-vid { animation:woZoom 15s ease-out .05s forwards; }
+        @keyframes woZoom { from { transform:scale(1.16); } to { transform:scale(1); } }
+        .wo-hero-inner .wo-h1 { animation:woRise 1.1s cubic-bezier(.16,.84,.24,1) .55s both; }
+        @keyframes woRise { from { opacity:0; transform:translateY(54px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+        .wo-hero-inner .wo-hero-strip { animation:woUp .7s ease 1.35s both; }
+        .wo-hero-inner .wo-lead { animation:woUp .7s ease 1.6s both; }
+        .wo-hero-inner .wo-cta-row { animation:woUp .7s ease 1.8s both; }
+        .wo-hero-inner .wo-note { animation:woUp .7s ease 2s both; }
+        @keyframes woUp { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
+        .wo-hero-inner .wo-stamp { animation:woSlam .55s cubic-bezier(.2,1.25,.4,1) 2.1s both; }
+        @keyframes woSlam { from { opacity:0; transform:rotate(-9deg) scale(2.6); } to { opacity:.85; transform:rotate(-9deg) scale(1); } }
+        @media (prefers-reduced-motion:reduce) {
+          .wo-hero-curtain { display:none; }
+          .wo-hero-vid, .wo-hero-inner .wo-h1, .wo-hero-inner .wo-hero-strip, .wo-hero-inner .wo-lead, .wo-hero-inner .wo-cta-row, .wo-hero-inner .wo-note, .wo-hero-inner .wo-stamp { animation:none !important; }
+        }
         .wo-hero-strip { display:flex; flex-wrap:wrap; gap:26px; font-size:12px; padding-bottom:30px; }
         .wo-hero-strip b { font-weight:700; }
         .wo-h1 { font-size:clamp(3rem,12vw,8.5rem); font-weight:700; line-height:.84; letter-spacing:-.03em; margin:0; }
@@ -133,7 +203,7 @@ export default function WorkOrderSite() {
         .wo-watermark { position:absolute; right:-2%; bottom:-6%; font-size:24vw; font-weight:700; color:rgba(26,22,15,.035); letter-spacing:-.04em; pointer-events:none; line-height:.8; }
 
         /* sections */
-        .wo-sec { padding:54px 0; border-bottom:2px dashed var(--line); position:relative; }
+        .wo-sec { padding:54px 0; border-top:2px dashed var(--line); border-bottom:2px dashed var(--line); position:relative; z-index:1; background-color:var(--paper); box-shadow:0 -28px 50px rgba(26,22,15,.16); }
         .wo-secbar { display:flex; align-items:center; gap:12px; background:var(--ink); color:var(--paper); padding:9px 14px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:0; }
         .wo-secn { font-weight:700; color:var(--red); }
 
@@ -176,6 +246,7 @@ export default function WorkOrderSite() {
         .wo-proc { display:grid; grid-template-columns:repeat(5,1fr); border:1px solid var(--line); border-top:0; }
         .wo-step { padding:20px 16px; border-right:1px solid var(--line); }
         .wo-step:last-child { border-right:0; }
+        .wo-step-img { display:block; width:calc(100% + 32px); height:118px; object-fit:cover; margin:-20px -16px 16px; filter:saturate(1.02); }
         .wo-step-n { font-size:12px; color:var(--red); font-weight:700; }
         .wo-step h4 { margin:10px 0 8px; font-size:15px; }
         .wo-step p { margin:0; font-size:11px; line-height:1.6; color:var(--soft); }
@@ -222,6 +293,23 @@ export default function WorkOrderSite() {
         @keyframes slap { from { transform:rotate(-11deg) scale(2.2); opacity:0; } to { transform:rotate(-11deg) scale(1); opacity:1; } }
 
         /* footer */
+        .wo-gal { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; padding-top:22px; }
+        .wo-gal figure { margin:0; position:relative; overflow:hidden; border:1px solid var(--line); }
+        .wo-gal img { width:100%; height:190px; object-fit:cover; display:block; transition:transform .35s; }
+        .wo-gal figure:hover img { transform:scale(1.05); }
+        .wo-gal .gc { position:absolute; left:9px; bottom:7px; font-family:'Caveat',cursive; color:#fff; font-size:22px; text-shadow:0 1px 5px rgba(0,0,0,.7); }
+        .wo-result { display:grid; grid-template-columns:1.1fr 1fr; gap:38px; align-items:center; padding-top:8px; }
+        .wo-result img { width:100%; height:340px; object-fit:cover; display:block; border:1px solid var(--line); }
+        .wo-rstars { color:var(--red); letter-spacing:3px; font-size:18px; }
+        .wo-quote { font-size:23px; line-height:1.4; font-weight:700; margin:16px 0; }
+        .wo-cite { font-style:normal; color:var(--soft); font-size:13px; }
+        .wo-cta-h { font-size:clamp(1.8rem,4.5vw,3rem); font-weight:700; letter-spacing:-.02em; margin:0 0 22px; max-width:18ch; }
+        .wo-cta-btn { background:var(--red); color:var(--paper); border:0; font-family:'Space Mono',monospace; font-weight:700; font-size:13px; letter-spacing:.08em; text-transform:uppercase; padding:16px 30px; cursor:pointer; transition:background .2s; }
+        .wo-cta-btn:hover { background:var(--ink); }
+        .wo-feats { display:flex; flex-wrap:wrap; gap:28px; margin-top:42px; }
+        .wo-feat b { display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; }
+        .wo-feat span { font-size:12px; color:var(--soft); }
+        @media (max-width:820px) { .wo-gal { grid-template-columns:1fr 1fr; } .wo-result { grid-template-columns:1fr; } }
         .wo-foot { padding:40px 0 50px; }
         .wo-terms { font-size:10px; color:var(--soft); line-height:1.7; max-width:80ch; }
         .wo-barwrap { display:flex; flex-direction:column; align-items:center; gap:6px; margin:26px 0 0; }
@@ -241,6 +329,8 @@ export default function WorkOrderSite() {
           .wo-code, .wo-hrs { display:none; }
           .wo-proc { grid-template-columns:1fr; }
           .wo-stamp { font-size:13px; right:8px; }
+          .wo-hero { min-height:86vh; }
+          .wo-hero-veil { background:linear-gradient(180deg, rgba(13,13,15,.5), rgba(13,13,15,.92)); }
         }
       `}</style>
 
@@ -261,14 +351,20 @@ export default function WorkOrderSite() {
 
       {/* HERO */}
       <header id="hero" className="wo-hero">
-        <div className="wrap">
+        <video className="wo-hero-vid" autoPlay muted loop playsInline poster="https://assets.mixkit.co/videos/50990/50990-thumb-720-0.jpg">
+          <source src="/videos/hero.mp4" type="video/mp4" />
+          <source src="https://assets.mixkit.co/videos/50990/50990-720.mp4" type="video/mp4" />
+        </video>
+        <div className="wo-hero-veil" />
+        <div className="wo-hero-curtain" />
+        <div className="wrap wo-hero-inner">
           <div className="wo-hero-strip">
             <span>R.O. No. <b>04-2291</b></span>
             <span>Date <span className="hw" style={{ fontSize: "1.4em" }}>{today}</span></span>
             <span>Bay <b>04</b></span>
             <span>Status <b>OPEN</b></span>
           </div>
-          <h1 className="wo-h1">EVERY DETAIL,<br /><em><Typed text="ITEMIZED." /></em></h1>
+          <h1 className="wo-h1">EVERY DETAIL,<br /><em><Typed text="ITEMIZED." delay={1400} /></em></h1>
           <p className="wo-lead">
             Premium auto detailing written like a work order. Pick the operations you want,
             watch the estimate total live, and authorize it yourself. Done by hand. No upsells,
@@ -280,7 +376,6 @@ export default function WorkOrderSite() {
           </div>
           <div className="wo-note hw">— done by hand, signed off by you</div>
           <div className="wo-stamp">ESTIMATE</div>
-          <div className="wo-watermark">RO</div>
         </div>
       </header>
 
@@ -288,7 +383,7 @@ export default function WorkOrderSite() {
       <section id="ops" className="wo-sec">
         <div className="wrap">
           <SecBar n="01" t="Build your order — package or à la carte" />
-          <div className="wo-presets">
+          <div className="wo-presets" data-reveal="print">
             <span className="wo-presets-lbl">Quick start</span>
             {PACKAGES.map((p) => {
               const on = sel.size === p.codes.length && p.codes.every((c) => sel.has(c));
@@ -297,7 +392,7 @@ export default function WorkOrderSite() {
             <button className="wo-preset clear" onClick={() => setSel(new Set())}>Clear</button>
           </div>
           <div className="wo-ops-grid">
-            <div className="wo-items">
+            <div className="wo-items" data-reveal="print">
               <div className="wo-irow head"><span /><span>Code</span><span>Description</span><span>Hrs</span><span style={{ textAlign: "right" }}>Amount</span></div>
               {OPS.map((o) => {
                 const on = sel.has(o.code);
@@ -310,7 +405,7 @@ export default function WorkOrderSite() {
                 );
               })}
             </div>
-            <div className="wo-est">
+            <div className="wo-est" data-reveal="drop">
               <h4>Live Estimate</h4>
               <div className="wo-trow"><span>Subtotal · {sel.size} ops</span><span>{money(subtotal)}</span></div>
               <div className="wo-trow"><span>Shop supplies</span><span>{money(supplies)}</span></div>
@@ -325,10 +420,10 @@ export default function WorkOrderSite() {
       {/* PHOTOS */}
       <section className="wo-sec">
         <div className="wrap">
-          <div className="wo-attach-lbl">▸ Previous Work Done.</div>
+          <div className="wo-attach-lbl">▸ Photos attached to this order</div>
           <div className="wo-photos">
-            <figure className="wo-photo tilt-l"><span className="wo-tape" /><img src={PHOTO_A} alt="Before and after detail" /><figcaption className="cap">before → after</figcaption></figure>
-            <figure className="wo-photo tilt-r"><span className="wo-tape" /><img src={PHOTO_B} alt="Before and after detail" /><figcaption className="cap">before → after</figcaption></figure>
+            <figure className="wo-photo tilt-l" data-reveal="drop"><span className="wo-tape" /><img src={PHOTO_A} alt="Before and after detail" /><figcaption className="cap">before → after</figcaption></figure>
+            <figure className="wo-photo tilt-r" data-reveal="drop"><span className="wo-tape" /><img src={PHOTO_B} alt="Before and after detail" /><figcaption className="cap">before → after</figcaption></figure>
           </div>
         </div>
       </section>
@@ -338,8 +433,9 @@ export default function WorkOrderSite() {
         <div className="wrap">
           <SecBar n="02" t="Procedure — every order, every time" />
           <div className="wo-proc">
-            {PROCEDURE.map(([n, t, d]) => (
-              <div className="wo-step" key={n}>
+            {PROCEDURE.map(([n, t, d, img], i) => (
+              <div className="wo-step" key={n} data-reveal="print" style={{ transitionDelay: i * 80 + "ms" }}>
+                <img className="wo-step-img" src={img} alt="" loading="lazy" />
                 <div className="wo-step-n">{n}</div><h4>{t}</h4><p>{d}</p>
               </div>
             ))}
@@ -347,13 +443,26 @@ export default function WorkOrderSite() {
         </div>
       </section>
 
+      {/* GALLERY */}
+      <section id="gallery" className="wo-sec">
+        <div className="wrap">
+          <SecBar n="03" t="Recent work" />
+          <div className="wo-gal">
+            <figure><img src={IMG.wheel} alt="Wheel detail" loading="lazy" /><figcaption className="gc">wheels</figcaption></figure>
+            <figure><img src={IMG.bay} alt="Paint correction" loading="lazy" /><figcaption className="gc">correction</figcaption></figure>
+            <figure><img src={IMG.interior} alt="Interior detail" loading="lazy" /><figcaption className="gc">interior</figcaption></figure>
+            <figure><img src={IMG.pair} alt="Finished cars" loading="lazy" /><figcaption className="gc">finished</figcaption></figure>
+          </div>
+        </div>
+      </section>
+
       {/* SIGN-OFFS */}
       <section className="wo-sec">
         <div className="wrap">
-          <SecBar n="03" t="Sign-offs — owner approvals" />
+          <SecBar n="04" t="Sign-offs — owner approvals" />
           <div className="wo-slips">
-            {SIGNOFFS.map((s) => (
-              <div className="wo-slip" key={s.n}>
+            {SIGNOFFS.map((s, i) => (
+              <div className="wo-slip" key={s.n} data-reveal="stamp" style={{ transitionDelay: i * 90 + "ms" }}>
                 <div className="ok">APPROVED</div>
                 <p>"{s.q}"</p>
                 <div className="by">{s.c}</div>
@@ -367,8 +476,8 @@ export default function WorkOrderSite() {
       {/* AUTHORIZATION */}
       <section id="book" className="wo-sec">
         <div className="wrap">
-          <SecBar n="04" t="Authorization" />
-          <div className="wo-auth">
+          <SecBar n="05" t="Authorization" />
+          <div className="wo-auth" data-reveal="print">
             {booked && <div className="wo-bookstamp">BOOKED ✓</div>}
             <div className="wo-arow">
               <div className="wo-in"><label>Printed name</label><input value={f.name} onChange={set("name")} /></div>
@@ -396,6 +505,34 @@ export default function WorkOrderSite() {
         </div>
       </section>
 
+      {/* RESULT */}
+      <section className="wo-sec">
+        <div className="wrap">
+          <div className="wo-result">
+            <img src={IMG.gloss} alt="Finished glossy car" loading="lazy" />
+            <div>
+              <div className="wo-rstars">★★★★★</div>
+              <blockquote className="wo-quote">"Absolutely incredible attention to detail. My car looks better than new."</blockquote>
+              <cite className="wo-cite">— Michael R., Porsche 911</cite>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="wo-sec">
+        <div className="wrap wo-cta">
+          <h2 className="wo-cta-h">Ready for a difference you can see?</h2>
+          <button className="wo-cta-btn" onClick={() => go("ops")}>Build your order ▸</button>
+          <div className="wo-feats">
+            <div className="wo-feat"><b>Free inspection</b><span>No obligation</span></div>
+            <div className="wo-feat"><b>Transparent pricing</b><span>No hidden fees</span></div>
+            <div className="wo-feat"><b>Premium products</b><span>Top quality only</span></div>
+            <div className="wo-feat"><b>Satisfaction guarantee</b><span>100% guaranteed</span></div>
+          </div>
+        </div>
+      </section>
+
       {/* FOOTER */}
       <footer className="wo-foot">
         <div className="wrap">
@@ -404,7 +541,7 @@ export default function WorkOrderSite() {
             fully insured technicians. Ceramic coatings carry manufacturer warranty. Prices in USD. This document constitutes a request for
             service, not a binding contract, until authorized in section 05.
           </p>
-          <div className="wo-barwrap"><div className="wo-barcode" /><span className="wo-barnum">WE SWEAT THE SMALL STUFF</span></div>
+          <div className="wo-barwrap" data-reveal="print"><div className="wo-barcode" /><span className="wo-barnum">WE SWEAT THE SMALL STUFF</span></div>
           <div className="wo-credit">CONCOURS DETAIL STUDIO · 1200 CHROME AVE · (555) 014-2280 · BUILT BY KODED BY KANAE</div>
         </div>
       </footer>
